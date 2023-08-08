@@ -4,7 +4,7 @@ import sys, os
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
-df = pd.read_csv('18_02_26_swarm.csv', names=['timestamp', 'uri', 'x', 'y', 'z'], header=None) #Change File
+df = pd.read_csv('18_02_26_swarm.csv', names=['timestamp', 'uri', 'x', 'y', 'z','acc_x', 'acc_y', 'acc_z', 'roll', 'pitch', 'yaw',], header=None) #Change File
 
 starts = df.groupby('uri').first()['timestamp']
 df['timestamp'] = df['timestamp'] - df['uri'].map(starts)
