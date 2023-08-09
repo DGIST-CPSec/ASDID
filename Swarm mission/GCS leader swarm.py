@@ -2,7 +2,7 @@ import time
 import datetime
 import os
 import math
-
+import matplotlib.pyplot as plt
 import cflib.crtp
 from cflib.crazyflie import Crazyflie
 from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
@@ -15,8 +15,10 @@ leader_uri = 'radio://0/80/2M/E7E7E7E701'
 follower_uri = 'radio://0/80/2M/E7E7E7E702'
 
 follower_phlc = None
+follower_x, follower_y, follower_z = 0, 0, 0
 
-follower_x, follower_y, follower_z = 0, 0, 0  # Initialize follower drone's position
+leader_positions = {'x': [], 'y': [], 'z': []}
+follower_positions = {'x': [], 'y': [], 'z': []}
 
 def initialize(scf):
     scf.cf.param.request_update_of_all_params()
@@ -33,6 +35,11 @@ def position_callback(timestamp, data, logconf):
     y = data['stateEstimate.y']
     z = data['stateEstimate.z']
     print('Position: ({}, {}, {})'.format(x, y, z))
+    
+    leader_positions['x'].append(x)
+    leader_positions['y'].append(y)
+    leader_positions['z'].append(z)
+
 
     # 팔로워 드론의 목표 위치를 리더 드론의 현재 위치로 설정
     distance = math.sqrt((x - follower_x) ** 2 + (y - follower_y) ** 2 + (z - follower_z) ** 2) # 팔로워 드론과 리더 드론 사이의 거리를 계산합니다.
@@ -49,6 +56,11 @@ def follower_position_callback(timestamp, data, logconf):
     follower_x = data['stateEstimate.x']
     follower_y = data['stateEstimate.y']
     follower_z = data['stateEstimate.z']
+    
+    follower_positions['x'].append(follower_x)
+    follower_positions['y'].append(follower_y)
+    follower_positions['z'].append(follower_z)
+
 
 logconf = LogConfig(name='Position', period_in_ms=100)
 logconf.add_variable('stateEstimate.x', 'float')
@@ -112,25 +124,33 @@ def mission_phlc(leader_cf, follower_cf, code, leader_pos, follower_pos):
         time.sleep(3)
         leader_phlc.go_to(0.0, 0.0)
         time.sleep(3)
-    elif code == 5: # circular round trip approximated with linear paths
-        radius = 0.5
-        points = 8  # number of points to approximate the circle
-        angle_step = 2 * math.pi / points
-
-        for i in range(points):
-            x = radius * math.cos(i * angle_step)
-            y = radius * math.sin(i * angle_step)
-            leader_phlc.go_to(x, y)
-            time.sleep(0.5)  # Adjust the sleep time if necessary
-
-        leader_phlc.go_to(0.0, 0.0)
-        time.sleep(3)
+    elif code == 5: # circular round trip
+        with MotionCommander(leader_cf, default_height=takeoff_height) as leader_mc:
+            leader_mc.circle_left(0.5, 0.4)
+            time.sleep(10)
     else:
         time.sleep(5) # up-down
+
     print('[MISSION]: mission command complete')
     leader_phlc.land()
     follower_phlc.land()
     print('[MISSION]: landing')
+    
+def plot_positions():
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection='3d')
+
+    ax.plot(leader_positions['x'], leader_positions['y'], leader_positions['z'], '-o', label='Leader', color='blue')
+    ax.plot(follower_positions['x'], follower_positions['y'], follower_positions['z'], '-o', label='Follower', color='red')
+
+    ax.set_title('Drone Paths in 3D')
+    ax.set_xlabel('X Position (m)')
+    ax.set_ylabel('Y Position (m)')
+    ax.set_zlabel('Z Position (m)')
+    ax.legend()
+
+    plt.show()
+
 
 def main():
     now = datetime.datetime.now()
