@@ -62,13 +62,16 @@ def log_stab_callback(uri, timestamp, data, log_conf):
         x = float(data['kalman.stateX'])
         y = float(data['kalman.stateY'])
         z = float(data['kalman.stateZ'])
-        acc_x = float(data['acc.x'])
-        acc_y = float(data['acc.y'])
-        acc_z = float(data['acc.z'])
+        # acc_x = float(data['acc.x'])
+        # acc_y = float(data['acc.y'])
+        # acc_z = float(data['acc.z'])
         roll = float(data['kalman.stateD0'])
         pitch = float(data['kalman.stateD1'])
         yaw = float(data['kalman.stateD2'])
-        logFile.write(str(timestamp)+','+str(uri)+','+str(x)+','+str(y)+','+str(z)+','+str(acc_x)+','+str(acc_y)+','+str(acc_z)+','+str(roll)+','+str(pitch)+','+str(yaw)+'\n')
+        logFile.write(str(timestamp)+','+str(uri)+','+str(x)+','+str(y)+','+str(z)+','
+                    #   +str(acc_x)+','+str(acc_y)+','+str(acc_z)+','
+                      +str(roll)+','+str(pitch)+','+str(yaw)
+                      +'\n')
         #csv file
         # time, uri, x, y, z, acc_x, acc_y, acc_z, roll, pitch, yaw
 
@@ -77,9 +80,12 @@ def simple_log_async(scf):
         'kalman.stateX': 'float',
         'kalman.stateY': 'float',
         'kalman.stateZ': 'float',
-        'acc.x': 'float',
-        'acc.y': 'float',
-        'acc.z': 'float'
+        # 'acc.x': 'float',
+        # 'acc.y': 'float',
+        # 'acc.z': 'float'
+        'kalman.stateD0' : 'float',
+        'kalman.stateD1' : 'float',
+        'kalman.stateD2' : 'float'
     }
 
     lg_stab = LogConfig(name='Position', period_in_ms=100)
@@ -88,7 +94,7 @@ def simple_log_async(scf):
 
     cf = scf.cf
     cf.log.add_config(lg_stab)
-    lg_stab.data_received_cb.add_callback(lambda t, d, l, m, n, o, p, q, r: log_stab_callback(cf.link_uri, t, d, l, m, n, o, p, q, r))
+    lg_stab.data_received_cb.add_callback(lambda t, d, l: log_stab_callback(cf.link_uri, t, d, l))
     lg_stab.start()
 
 def triggerRestart():
@@ -162,7 +168,7 @@ def mission(scf: SyncCrazyflie, posNo, code):
         print(f'[{scf.cf.link_uri}]: mission complete')
         phlc.land()
         print(f'[{scf.cf.link_uri}]: landing')
-    
+
 
 if __name__ == '__main__':
     now = datetime.datetime.now()
@@ -186,3 +192,4 @@ if __name__ == '__main__':
         except KeyboardInterrupt:
             logger.error('KeyboardInterrupt detected, triggering restart.')
             triggerRestart()
+        
