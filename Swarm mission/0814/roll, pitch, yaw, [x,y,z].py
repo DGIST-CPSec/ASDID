@@ -105,6 +105,9 @@ def mission_phlc(leader_cf, follower_cf, code, leader_pos, follower_pos):
 
     leader_phlc = PositionHlCommander(leader_cf, x=leader_pos[0], y=leader_pos[1], z=leader_pos[2])
     follower_phlc = PositionHlCommander(follower_cf, x=follower_pos[0], y=follower_pos[1], z=follower_pos[2])
+    
+    follower_phlc.take_off(takeoff_height, 1.0)
+    time.sleep(5) 
 
     leader_phlc.take_off(takeoff_height, 1.0)
     follower_phlc.take_off(takeoff_height, 1.0)  # 팔로워 드론도 같이 이륙
