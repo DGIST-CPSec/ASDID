@@ -12,11 +12,11 @@ from cflib.positioning.position_hl_commander import PositionHlCommander
 from cflib.crazyflie.swarm import Swarm, CachedCfFactory
 
 drones = [
-    'radio://0/80/2M/E7E7E7E701',
+    'radio://0/80/2M/E7E7E7E70B',
     'radio://0/80/2M/E7E7E7E704',
-    'radio://0/80/2M/E7E7E7E70C',
+    'radio://0/80/2M/E7E7E7E70D',
     'radio://0/80/2M/E7E7E7E705',
-    'radio://0/80/2M/E7E7E7E702',
+    'radio://0/80/2M/E7E7E7E70C',
 ]
 
 psws = [
@@ -65,9 +65,9 @@ def log_stab_callback(uri, timestamp, data, log_conf):
         # acc_x = float(data['acc.x'])
         # acc_y = float(data['acc.y'])
         # acc_z = float(data['acc.z'])
-        roll = float(data['kalman.stateD0'])
-        pitch = float(data['kalman.stateD1'])
-        yaw = float(data['kalman.stateD2'])
+        roll = float(data['stateEstimate.roll'])
+        pitch = float(data['stateEstimate.pitch'])
+        yaw = float(data['stateEstimate.yaw'])
         logFile.write(str(timestamp)+','+str(uri)+','+str(x)+','+str(y)+','+str(z)+','
                     #   +str(acc_x)+','+str(acc_y)+','+str(acc_z)+','
                       +str(roll)+','+str(pitch)+','+str(yaw)
@@ -83,9 +83,9 @@ def simple_log_async(scf):
         # 'acc.x': 'float',
         # 'acc.y': 'float',
         # 'acc.z': 'float'
-        'kalman.stateD0' : 'float',
-        'kalman.stateD1' : 'float',
-        'kalman.stateD2' : 'float'
+        'stateEstimate.roll' : 'float',
+        'stateEstimate.pitch' : 'float',
+        'stateEstimate.yaw' : 'float'
     }
 
     lg_stab = LogConfig(name='Position', period_in_ms=100)
