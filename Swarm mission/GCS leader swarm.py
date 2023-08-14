@@ -9,10 +9,11 @@ from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
 from cflib.positioning.motion_commander import MotionCommander
 from cflib.positioning.position_hl_commander import PositionHlCommander
 from cflib.crazyflie.log import LogConfig
+import csv
 
 # URI to the Crazyflie to connect to
-leader_uri = 'radio://0/80/2M/E7E7E7E701'
-follower_uri = 'radio://0/80/2M/E7E7E7E702'
+leader_uri = 'radio://0/80/2M/E7E7E7E704'
+follower_uri = 'radio://0/80/2M/E7E7E7E70C'
 
 follower_phlc = None
 follower_x, follower_y, follower_z = 0, 0, 0
@@ -152,6 +153,20 @@ def plot_positions():
     plt.show()
 
 
+def save_to_csv(filename, positions):
+    with open(filename, 'w', newline='') as csvfile:
+        fieldnames = ['x', 'y', 'z']
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+        writer.writeheader()
+        for i in range(len(positions['x'])):
+            writer.writerow({
+                'x': positions['x'][i],
+                'y': positions['y'][i],
+                'z': positions['z'][i]
+            })
+
+
 def main():
     now = datetime.datetime.now()
     missNo = int(input('Mission type:\n[0] Blink\t[1] In-position\t[2] Line\t[3] Triangle\t[4] Square\t[5] Circle\t[6] Up-down\n>> '))
@@ -182,3 +197,6 @@ def main():
 
 if __name__ == '__main__':
     main()
+    plot_positions()
+    save_to_csv("leader_positions.csv", leader_positions)
+    save_to_csv("follower_positions.csv", follower_positions)
