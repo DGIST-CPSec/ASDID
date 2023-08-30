@@ -49,7 +49,6 @@ class TrafficController:
     STATE_GOING_TO_PAD = 8
     STATE_WAITING_AT_PAD = 9
     STATE_LANDING = 10
-    STATE_CHECK_CHARGING = 11
     STATE_REPOSITION_ON_PAD = 12
     STATE_CRASHED = 13
 
@@ -69,7 +68,6 @@ class TrafficController:
         self._cf = None
         self._log_conf = None
         self.copter_state = self.STATE_UNKNOWN
-        self.vbat = -1.0
         self._time_for_next_connection_attempt = 0
         self.traj_cycles = None
         self.est_x = 0.0
@@ -111,26 +109,15 @@ class TrafficController:
         return self.copter_state == self.STATE_GOING_TO_PAD or \
                self.copter_state == self.STATE_WAITING_AT_PAD or \
                self.copter_state == self.STATE_LANDING or \
-               self.copter_state == self.STATE_CHECK_CHARGING or \
                self.copter_state == self.STATE_REPOSITION_ON_PAD
-
-    def is_charging(self):
-        return self.copter_state == self.STATE_WAIT_FOR_TAKE_OFF and not self._pre_state_taking_off()
 
     def is_crashed(self):
         return self.copter_state == self.STATE_CRASHED
 
     def take_off(self):
-        if self.is_charging():
-            if self._cf:
-                self._pre_state_taking_off_end_time = time.time() + self.PRE_STATE_TIMEOUT
-                self._cf.param.set_value('app.takeoff', 1)
-
-    # def take_off(self):
-    #     if self.is_charging():
-    #         if self._cf:
-    #             self._pre_state_taking_off_end_time = time.time() + self.PRE_STATE_TIMEOUT
-    #             self._cf.param.set_value('app.takeoff', 1)
+        if self._cf:
+            self._pre_state_taking_off_end_time = time.time() + self.PRE_STATE_TIMEOUT
+            self._cf.param.set_value('app.takeoff', 1)
 
     def start_trajectory(self, trajectory_delay, offset_x=0.0, offset_y=0.0, offset_z=0.0):
         if self.is_ready_for_flight():
@@ -142,16 +129,6 @@ class TrafficController:
                 self._pre_state_going_to_initial_position_end_time = time.time() + self.PRE_STATE_TIMEOUT
                 self._cf.param.set_value('app.start', trajectory_delay)
 
-    # def start_trajectory(self, trajectory_delay, offset_x=0.0, offset_y=0.0, offset_z=0.0):
-    #     if self.is_ready_for_flight():
-    #         if self._cf:
-    #             self._cf.param.set_value('app.offsx', offset_x)
-    #             self._cf.param.set_value('app.offsy', offset_y)
-    #             self._cf.param.set_value('app.offsz', offset_z)
-
-    #             self._pre_state_going_to_initial_position_end_time = time.time() + self.PRE_STATE_TIMEOUT
-    #             self._cf.param.set_value('app.start', trajectory_delay)
-
     def force_land(self):
         if self.connection_state == self.CS_CONNECTED:
             self._cf.param.set_value('app.stop', 1)
@@ -159,12 +136,6 @@ class TrafficController:
     def set_trajectory_count(self, count):
         if self.connection_state == self.CS_CONNECTED:
             self._cf.param.set_value('app.trajcount', count)
-
-    def get_charge_level(self):
-        return self.vbat
-
-    def is_charged_for_flight(self):
-        return self.vbat > 4.10
 
     def get_traj_cycles(self):
         return self.traj_cycles
@@ -232,7 +203,6 @@ class TrafficController:
         self._log_conf.add_variable('app.prgr', 'float')
         self._log_conf.add_variable('app.uptime', 'uint32_t')
         self._log_conf.add_variable('app.flighttime', 'uint32_t')
-        self._log_conf.add_variable('pm.vbat', 'float')
         self._log_conf.add_variable('stateEstimate.x', 'float')
         self._log_conf.add_variable('stateEstimate.y', 'float')
 
@@ -249,8 +219,6 @@ class TrafficController:
         if self.copter_state != self.STATE_HOVERING:
             self._pre_state_going_to_initial_position_end_time = 0
 
-        self.vbat = data['pm.vbat']
-
         self.up_time_ms = data['app.uptime']
         self.flight_time_ms = data['app.flighttime']
 
@@ -265,7 +233,6 @@ class TrafficController:
         print("***", self.uri)
         print("  Connection state:", self.connection_state)
         print("  Copter state:", self.copter_state)
-        print("  Bat:", self.vbat)
         print("  Up time:", self.up_time_ms / 1000)
         print("  Flight time:", self.flight_time_ms / 1000)
         print("  _pre_state_taking_off:", self._pre_state_taking_off())
@@ -298,24 +265,8 @@ class TowerBase:
         return count
 
     def find_best_controllers(self):
-        too_low_battery = []
-
-        charging_controllers = []
-        for controller in self.controllers:
-            if controller.is_charging():
-                charge = controller.get_charge_level()
-                if controller.is_charged_for_flight():
-                    charging_controllers.append((controller, charge))
-                else:
-                    too_low_battery.append(
-                        "{} ({:.2f}V)".format(controller.uri, charge))
-
-        if len(too_low_battery) > 0:
-            print("Ready but must charge:", too_low_battery)
-
-        charging_controllers.sort(key=lambda d: d[1], reverse=True)
-
-        return list(map(lambda d: d[0], charging_controllers))
+        return self.controllers
+    
 
     def land_all(self):
         for controller in self.controllers:
@@ -350,16 +301,11 @@ class TowerBase:
                 state = "hovering"
             elif controller.is_landing():
                 state = "landing"
-            elif controller.is_charged_for_flight():
-                state = "ready"
-            elif controller.is_charging():
-                state = "charging"
 
             try:
                 report = {
                     'id': i,
                     'state': state,
-                    'battery': controller.get_charge_level(),
                     'uptime': controller.up_time_ms,
                     'flighttime': controller.flight_time_ms,
                 }
