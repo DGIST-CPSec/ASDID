@@ -429,11 +429,11 @@ class SyncTower(TowerBase):
             [   0 + master_offset[0],  0.5 + master_offset[1], 0],
             [   0 + master_offset[0], -0.5 + master_offset[1], 0],
             [ 0.5 + master_offset[0],    0 + master_offset[1], 0],
-            [-0.5 + master_offset[0],    0 + master_offset[1], 0],
-            [ 0.5 + master_offset[0],  0.5 + master_offset[1], 0],
-            [-0.5 + master_offset[0], -0.5 + master_offset[1], 0],
-            [-0.5 + master_offset[0],  0.5 + master_offset[1], 0],
-            [ 0.5 + master_offset[0], -0.5 + master_offset[1], 0]
+            # [-0.5 + master_offset[0],    0 + master_offset[1], 0],
+            # [ 0.5 + master_offset[0],  0.5 + master_offset[1], 0],
+            # [-0.5 + master_offset[0], -0.5 + master_offset[1], 0],
+            # [-0.5 + master_offset[0],  0.5 + master_offset[1], 0],
+            # [ 0.5 + master_offset[0], -0.5 + master_offset[1], 0]
         ]
 
 
@@ -544,15 +544,15 @@ class SyncTower(TowerBase):
 
 
 uris = [
-    'radio://0/10/2M/E7E7E7E701',
-    'radio://0/10/2M/E7E7E7E702',
-    'radio://0/10/2M/E7E7E7E703',
-    'radio://0/10/2M/E7E7E7E704',
-    'radio://0/10/2M/E7E7E7E705',
-    'radio://0/10/2M/E7E7E7E706',
-    'radio://0/10/2M/E7E7E7E707',
-    'radio://0/10/2M/E7E7E7E708',
-    'radio://0/10/2M/E7E7E7E709'
+    'radio://0/80/2M/E7E7E7E70C',
+    'radio://0/80/2M/E7E7E7E70D',
+    'radio://0/80/2M/E7E7E7E70E',
+    'radio://0/80/2M/E7E7E7E702',
+    # 'radio://0/10/2M/E7E7E7E705',
+    # 'radio://0/10/2M/E7E7E7E706',
+    # 'radio://0/10/2M/E7E7E7E707',
+    # 'radio://0/10/2M/E7E7E7E708',
+    # 'radio://0/10/2M/E7E7E7E709'
 ]
 
 count = 1
