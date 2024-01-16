@@ -98,7 +98,7 @@ def run_sequence(scf, params):
             if _ > (steps // 2):
                 param_name = 'imu_sensors.imuPhi'
                 value = cf.param.get_value(param_name, _)
-                if _ // 2 == 0:
+                if _ % 2 == 0:
                     cf.param.set_value(param_name, value + 5)
                 else :
                     cf.param.set_value(param_name, value - 5)
