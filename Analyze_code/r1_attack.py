@@ -99,7 +99,7 @@ def run_sequence(scf, params):
             param_name1 = 'imu_sensors.imuPhi'
             param_name2 = 'imu_sensors.imuTheta'
             param_name3 = 'imu_sensors.imuPsi'
-            param_value = 180
+            param_value = math.sin(steps)
             cf.param.set_value(param_name1, param_value)
             time.sleep(fsi)
 
