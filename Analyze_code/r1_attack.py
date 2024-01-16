@@ -95,13 +95,15 @@ def run_sequence(scf, params):
         for _ in range(steps):
             cf.commander.send_hover_setpoint(d * comp * math.pi / circle_time,
                                              0, 360.0 / circle_time, z)
-            if _ == 16:
+            if _ > (steps // 2):
                 param_name = 'imu_sensors.imuPhi'
-                param_value = 180
-                cf.param.set_value(param_name, param_value)
-            else:
-                pass
+                value = cf.param.get_value(param_name, _)
+                if _ // 2 == 0:
+                    cf.param.set_value(param_name, value + 5)
+                else :
+                    cf.param.set_value(param_name, value - 5)
             time.sleep(fsi)
+            
 
     poshold(cf, 2, z)
 
