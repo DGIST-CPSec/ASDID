@@ -11,16 +11,14 @@ from cflib.positioning.position_hl_commander import PositionHlCommander
 from cflib.crazyflie.log import LogConfig
 
 # URI to the Crazyflie to connect to
-leader_uri = 'radio://0/80/2M/E7E7E7E701'
+leader_uri = 'radio://0/80/2M/E7E7E7E704'
 follower_uri = [
+    'radio://0/80/2M/E7E7E7E701',
+    'radio://0/80/2M/E7E7E7E702',
+    'radio://0/80/2M/E7E7E7E703',
     'radio://0/80/2M/E7E7E7E70A',
     'radio://0/80/2M/E7E7E7E70B',
     'radio://0/80/2M/E7E7E7E70C',
-    'radio://0/80/2M/E7E7E7E70D',
-    'radio://0/80/2M/E7E7E7E70E',
-    'radio://0/80/2M/E7E7E7E70E',
-    'radio://0/80/2M/E7E7E7E70E',
-    'radio://0/80/2M/E7E7E7E70E',
 ]
 
 follower_positions = {uri: (0, 0, 0) for uri in follower_uris}
@@ -100,13 +98,17 @@ def main():
     now = datetime.datetime.now()
     
     # 리더 드론의 초기 위치 입력
-    leader_init_pos = list(map(int, input('Start position of leader drone (x, y, z in meters):\n>> ').split()))
+    leader_init_pos = [0, 0, 0]  # 리더 드론의 초기 위치를 원점으로 설정
 
-    # 팔로워 드론들의 초기 위치 입력
-    follower_init_poses = []
-    for i in range(len(follower_uris)):
-        pos = list(map(int, input(f'Start position of follower drone {i+1} (x, y, z in meters):\n>> ').split()))
-        follower_init_poses.append(pos)
+    # 팔로워 드론들의 초기 위치 설정
+    follower_init_poses = [
+    
+        [-1.4, 1.4, 0], [1.4, 1.4, 0],
+        [-2.0, 0, 0], [0, 0, 0], [2.0, 0, 0],
+        [-1.4, -1.4, 0], [1.4, -1.4, 0],
+
+    ]
+    
 
     cflib.crtp.init_drivers()
 
