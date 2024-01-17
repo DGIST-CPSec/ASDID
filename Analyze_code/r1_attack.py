@@ -97,11 +97,10 @@ def run_sequence(scf, params):
                                              0, 360.0 / circle_time, z)
             if _ > (steps // 2):
                 param_name = 'imu_sensors.imuPhi'
-                value = cf.param.get_value(param_name, _)
                 if _ % 2 == 0:
-                    cf.param.set_value(param_name, value + 5)
+                    cf.param.set_value(param_name, 1.5)
                 else :
-                    cf.param.set_value(param_name, value - 5)
+                    cf.param.set_value(param_name, 0.5)
             time.sleep(fsi)
             
 
