@@ -65,7 +65,7 @@ drone_ID = ['0A', '0B', '0C', '0D', '0E', '0F', '0G', '0H']
 
 def mission(scf: SyncCrazyflie, posNo, code):
     takeoff_height = 1.0
-
+    # logconf.start()
     if code == 0:
         time.sleep(3)
         print('[MISSION]: begin to blink')
@@ -74,33 +74,35 @@ def mission(scf: SyncCrazyflie, posNo, code):
             time.sleep(0.5)
             scf.cf.param.set_value('led.bitmask', 0)
             time.sleep(0.5)
+            
 
-    elif code == 2:
+    elif code == 2:  # 새로운 미션 유형
         phlc = PositionHlCommander(scf, 
                                    x=initialPos[posNo][0], 
                                    y=initialPos[posNo][1], 
                                    z=initialPos[posNo][2])
         phlc.take_off(1.0, 1.0)
         time.sleep(2)
-
-        if posNo == 2:  # 3번 드론에 대한 파라미터 조정
-            time.sleep(3)  # 비행 시작 후 3초 대기
-            param_name = 'param_to_scale'  # 변경할 파라미터 이름
-            original_value = scf.cf.param.get_value(param_name)  # 원래 파라미터 값 가져오기
-            new_value = float(original_value) * 1.1  # 새로운 값 계산 (1.1배 증가)
-            scf.cf.param.set_value(param_name, str(new_value))  # 새로운 값 설정
-
+        
+        param_name = 'imu_sensors.imuPhi'
+        scf.cf.param.set_value(param_name, 1.5)
+        
+        # 위치 교차 이동
         phlc.move_distance(moveDelta[posNo][0], 
                            moveDelta[posNo][1], 
                            moveDelta[posNo][2])
         time.sleep(2)
+        
+        scf.cf.param.set_value(param_name, 0.5)
+        
         phlc.land()
           
     else:
         phlc = PositionHlCommander(scf, 
-                                   x=initialPos[posNo][0], 
-                                   y=initialPos[posNo][1], 
-                                   z=initialPos[posNo][2])
+                                x = initialPos[posNo][0], 
+                                y = initialPos[posNo][1], 
+                                z = initialPos[posNo][2]
+                                )
         phlc.take_off(takeoff_height, 1.0)
         time.sleep(5)
         print(f'[{scf.cf.link_uri}]: takeoff complete')
@@ -108,13 +110,6 @@ def mission(scf: SyncCrazyflie, posNo, code):
         phlc.set_default_velocity(0.5)
         phlc.set_landing_height(0.0)
 
-        if posNo == 2:  # 3번 드론에 대한 파라미터 조정
-            time.sleep(3)  # 비행 시작 후 3초 대기
-            param_name = 'imu_sensors.imuPhi'
-            original_value = scf.cf.param.get_value(param_name) # 원래 파라미터 값 가져오기
-            new_value = float(original_value) * 1.1 # 새로운 값 계산 (1.1배 증가)
-            scf.cf.param.set_value(param_name, str(new_value)) # 새로운 값 설정
-        
         if code == 1:
             phlc.up(0.5)
             time.sleep(3)
@@ -126,6 +121,10 @@ def mission(scf: SyncCrazyflie, posNo, code):
         print(f'[{scf.cf.link_uri}]: mission complete')
         phlc.land()
         print(f'[{scf.cf.link_uri}]: landing')
+    # logconf.stop()
+    # logFile.close()
+
+    # logFile.close()
 
 if __name__ == '__main__':
     now = datetime.datetime.now()
