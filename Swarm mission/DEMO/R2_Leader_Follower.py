@@ -1,144 +1,150 @@
+import time, datetime, os
 
-import time
-import datetime
-import os
-import math
 import cflib.crtp
 from cflib.crazyflie import Crazyflie
+from cflib.crazyflie.log import LogConfig
 from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
 from cflib.positioning.motion_commander import MotionCommander
+from cflib.utils import uri_helper
+from cflib.utils.power_switch import PowerSwitch
 from cflib.positioning.position_hl_commander import PositionHlCommander
-from cflib.crazyflie.log import LogConfig
 
-# URI to the Crazyflie to connect to
-leader_uri = 'radio://0/80/2M/E7E7E7E704'
-follower_uri = [
-    'radio://0/80/2M/E7E7E7E701',
-    'radio://0/80/2M/E7E7E7E702',
-    'radio://0/80/2M/E7E7E7E703',
+from cflib.crazyflie.swarm import Swarm, CachedCfFactory
+
+drones = [
     'radio://0/80/2M/E7E7E7E70A',
     'radio://0/80/2M/E7E7E7E70B',
     'radio://0/80/2M/E7E7E7E70C',
+    'radio://0/80/2M/E7E7E7E70D',
+    'radio://0/80/2M/E7E7E7E70E',
+    'radio://0/80/2M/E7E7E7E701',
+    'radio://0/80/2M/E7E7E7E702',
+    'radio://0/80/2M/E7E7E7E703',
 ]
 
-follower_positions = {uri: (0, 0, 0) for uri in follower_uris}
+psws = [PowerSwitch(drone) for drone in drones]
 
-def initialize(scf):
-    scf.cf.param.request_update_of_all_params()
-    scf.cf.param.set_value('kalman.resetEstimation', '1')
-    time.sleep(0.1)
-    scf.cf.param.set_value('kalman.resetEstimation', '0')
-    print('[INIT]: kalman prediction reset')
-    scf.cf.param.set_value('health.startPropTest', '1')  # propeller test before flight
-    time.sleep(5)
-    print('[INIT]: initialization complete')
+initialPos = [
+    [-0.7, 0.7, 0], [0.7, 0.7, 0],
+    [-1.0, 0, 0], [0, 0, 0], [1.0, 0, 0],
+    [-0.7, -0.7, 0], [0.7, -0.7, 0],
+]
 
-def position_callback(timestamp, data, logconf):
-    x = data['stateEstimate.x']
-    y = data['stateEstimate.y']
-    z = data['stateEstimate.z']
-    print('Position: ({}, {}, {})'.format(x, y, z))
+moveDelta = [
+    [1.0, 0.0, 0.0], # 각 드론을 앞으로 1미터 이동
+    [1.0, 0.0, 0.0],
+    [1.0, 0.0, 0.0],
+    [1.0, 0.0, 0.0],
+    [1.0, 0.0, 0.0],
+    [1.0, 0.0, 0.0],
+    [1.0, 0.0, 0.0],
+]
 
-def follower_position_callback(timestamp, data, logconf, uri):
-    global follower_positions
-    follower_positions[uri] = (data['stateEstimate.x'], data['stateEstimate.y'], data['stateEstimate.z'])
+missNo    = int(input('Mission type: \n - [0]Blink \n - [1]In-position \n - [2]Line \n - [6]Up-down\n >>'))
 
-def update_follower_positions(scfs, leader_phlc):
-    safe_distance = 0.1  # 10 cm
-    leader_position = (leader_phlc._x, leader_phlc._y, leader_phlc._z)
+arguments = {
+    drones[0] : [0, missNo],
+    drones[1] : [1, missNo],
+    drones[2] : [2, missNo],
+    drones[3] : [3, missNo],
+    drones[4] : [4, missNo],
+    drones[5] : [5, missNo],
+    drones[6] : [6, missNo],
+    drones[7] : [7, missNo],
+}
 
-    for scf in scfs:
-        with PositionHlCommander(scf.cf) as follower_phlc:
-            current_position = follower_positions[scf.cf.link_uri]
-            distance_to_leader = math.sqrt(sum((c - l) ** 2 for c, l in zip(current_position, leader_position)))
+miss_type = ['NO', 'TR']
+drone_ID = ['0A', '0B', '0C', '0D', '0E', '0F', '0G', '0H']
 
-            if distance_to_leader < safe_distance:
-                # 리더 드론으로부터 멀어지기
-                follower_phlc.back(0.1)
-            else:
-                # 리더 드론을 따라가기
-                follower_phlc.go_to(leader_position[0], leader_position[1], leader_position[2])
+leader_x, leader_y, leader_z = 0.0, 0.0, 0.0
+prev_leader_x, prev_leader_y, prev_leader_z = 0.0, 0.0, 0.0
 
-            # 다른 팔로워 드론들과의 거리 확인 및 조정
-            for other_uri, other_position in follower_positions.items():
-                if scf.cf.link_uri != other_uri:
-                    distance_to_other = math.sqrt(sum((c - o) ** 2 for c, o in zip(current_position, other_position)))
-                    if distance_to_other < safe_distance:
-                        # 다른 드론으로부터 멀어지기
-                        follower_phlc.back(0.1)
+leader_logconf = LogConfig(name='Leader Position', period_in_ms=100)
+leader_logconf.add_variable('stateEstimate.x', 'float')
+leader_logconf.add_variable('stateEstimate.y', 'float')
+leader_logconf.add_variable('stateEstimate.z', 'float')
 
-def mission_phlc(leader_cf, scfs, leader_init_pos, follower_init_poses):
-    global follower_phlc
+def leader_position_callback(timestamp, data, logconf):
+    global leader_x, leader_y, leader_z
+    global prev_leader_x, prev_leader_y, prev_leader_z
+
+    # 리더 드론의 현재 위치 업데이트
+    leader_x = data['stateEstimate.x']
+    leader_y = data['stateEstimate.y']
+    leader_z = data['stateEstimate.z']
+
+    # 리더 드론의 이동 거리 및 방향 계산
+    delta_x = leader_x - prev_leader_x
+    delta_y = leader_y - prev_leader_y
+    delta_z = leader_z - prev_leader_z
+
+    # 팔로워 드론들에게 리더 드론의 이동 정보 전달
+    for follower_uri in follower_drones:
+        move_follower_drone(follower_uri, delta_x, delta_y, delta_z)
+
+    # 이전 위치 업데이트
+    prev_leader_x, prev_leader_y, prev_leader_z = leader_x, leader_y, leader_z
+    
+# 팔로워 드론을 이동시키는 함수
+def move_follower_drone(uri, delta_x, delta_y, delta_z):
+    with SyncCrazyflie(uri, cf=Crazyflie(rw_cache='./cache')) as scf:
+        phlc = PositionHlCommander(scf)
+        phlc.move_distance(delta_x, delta_y, delta_z)
+    
+def mission(scf: SyncCrazyflie, posNo, code):
     takeoff_height = 1.0
 
-    # 리더 드론 설정 및 이륙
-    with PositionHlCommander(leader_cf, x=leader_init_pos[0], y=leader_init_pos[1], z=leader_init_pos[2]) as leader_phlc:
-        leader_phlc.take_off(takeoff_height, 1.0)
-        time.sleep(5)
-        print('[MISSION]: Leader takeoff complete')
+    if scf.cf.link_uri == leader_drone:  # 리더 드론일 경우에만 동작
+        phlc = PositionHlCommander(scf, 
+                                   x=initialPos[posNo][0], 
+                                   y=initialPos[posNo][1], 
+                                   z=initialPos[posNo][2])
+        phlc.take_off(1.0, 1.0)
+        time.sleep(2)
 
-        leader_phlc.forward(1)
-        time.sleep(3)
-        update_follower_positions(scfs, leader_phlc)
+        # 리더 드론을 정의된 대로 앞으로 1미터 이동
+        phlc.move_distance(moveDelta[posNo][0], 
+                           moveDelta[posNo][1], 
+                           moveDelta[posNo][2])
+        time.sleep(2)
 
-        leader_phlc.land()
-        print('[MISSION]: Leader landing')
+        phlc.land()
 
-    for i, scf in enumerate(scfs):
-        follower_pos = follower_init_poses[i]
-        with PositionHlCommander(scf.cf, x=follower_pos[0], y=follower_pos[1], z=follower_pos[2]) as follower_phlc:
-            follower_phlc.take_off(takeoff_height, 1.0)
-            time.sleep(5)
-            print(f'[MISSION]: Follower {i+1} takeoff complete')
-
-            follower_phlc.land()
-            print(f'[MISSION]: Follower {i+1} landing')
+leader_drone = None
 
 def main():
-    now = datetime.datetime.now()
-    
-    # 리더 드론의 초기 위치 입력
-    leader_init_pos = [0, 0, 0]  # 리더 드론의 초기 위치를 원점으로 설정
-
-    # 팔로워 드론들의 초기 위치 설정
-    follower_init_poses = [
-    
-        [-0.7, 0.7, 0], [0.7, 0.7, 0],
-        [-1.0, 0, 0], [1.0, 0, 0],
-        [-0.7, -0.7, 0], [0.7, -0.7, 0],
-
-    ]
-    
-
+    global leader_drone, follower_drones
     cflib.crtp.init_drivers()
 
-    with SyncCrazyflie(leader_uri, cf=Crazyflie(rw_cache='./cache')) as leader_cf:
-        scfs = [SyncCrazyflie(uri, cf=Crazyflie(rw_cache='./cache')) for uri in follower_uris]
-        try:
-            initialize(leader_cf)
-            for scf in scfs:
-                initialize(scf.cf)
+    # 드론 URI와 위치 매핑
+    drone_positions = dict(zip(drones, initialPos))
 
-            leader_cf.cf.log.add_config(logconf)
-            logconf.data_received_cb.add_callback(position_callback)
-            logconf.start()
+    # 리더 및 팔로워 드론 리스트 초기화
+    leader_drone = None
+    follower_drones = []
 
-            for scf in scfs:
-                follower_cf = scf.cf
-                follower_logconf = LogConfig(name='Follower Position', period_in_ms=100)
-                follower_logconf.add_variable('stateEstimate.x', 'float')
-                follower_logconf.add_variable('stateEstimate.y', 'float')
-                follower_logconf.add_variable('stateEstimate.z', 'float')
-                follower_cf.log.add_config(follower_logconf)
-                uri = follower_cf.link_uri
-                follower_logconf.data_received_cb.add_callback(lambda ts, data, lc: follower_position_callback(ts, data, lc, uri))
-                follower_logconf.start()
+    # 각 드론을 리더 또는 팔로워로 분류
+    for drone_uri, pos in drone_positions.items():
+        if pos == [0.0, 0.0, 0.0]:
+            leader_drone = drone_uri
+        else:
+            follower_drones.append(drone_uri)
 
-            mission_phlc(leader_cf, scfs, leader_init_pos, follower_init_poses)
+    factory = CachedCfFactory(rw_cache='./cache')
 
-            print('[MAIN]: mission complete. Rebooting...')
-        except KeyboardInterrupt:
-            print('\n\n[MAIN]: EMERGENCY STOP TRIGGERED\n')
+    with SyncCrazyflie(leader_drone, cf=Crazyflie(rw_cache='./cache')) as leader_cf:
+        leader_cf.cf.log.add_config(leader_logconf)
+        leader_logconf.data_received_cb.add_callback(leader_position_callback)
+        leader_logconf.start()
+
+        with Swarm(drones, factory=factory) as swarm:
+            try:
+                swarm.parallel_safe(mission, args_dict=arguments)
+            except KeyboardInterrupt:
+                print('EMERGENCY STOP TRIGGERED')
+                for i in psws:
+                    i.platform_power_down()
+                    print('['+str(hex(i.address[4]))+']: SHUTDOWN')
 
 if __name__ == '__main__':
     main()
