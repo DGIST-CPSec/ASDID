@@ -84,10 +84,10 @@ def leader_position_callback(timestamp, data, logconf):
     prev_leader_x, prev_leader_y, prev_leader_z = leader_x, leader_y, leader_z
     
 # 팔로워 드론을 이동시키는 함수
-def move_follower_drone(uri, takeoff_height):
+def move_follower_drone(uri, delta_x, delta_y, delta_z):
     with SyncCrazyflie(uri, cf=Crazyflie(rw_cache='./cache')) as scf:
         phlc = PositionHlCommander(scf)
-        phlc.take_off(takeoff_height, 2.0)
+        phlc.move_distance(delta_x, delta_y, delta_z)
 
 
 def follower_sync_movement(scf: SyncCrazyflie, posNo):
@@ -98,30 +98,33 @@ def follower_sync_movement(scf: SyncCrazyflie, posNo):
 def mission(scf: SyncCrazyflie, posNo, code):
     takeoff_height = 1.0
 
-    # 리더 드론일 경우에만 동작
-    if code==2 and scf.cf.link_uri == leader_drone:
-        phlc = PositionHlCommander(scf, 
-                                   x=initialPos[posNo][0], 
-                                   y=initialPos[posNo][1], 
-                                   z=initialPos[posNo][2])
-        phlc.take_off(takeoff_height, 2.0)
-        time.sleep(4)
+    # 모든 드론 이륙
+    phlc = PositionHlCommander(scf, 
+                               x=initialPos[posNo][0], 
+                               y=initialPos[posNo][1], 
+                               z=initialPos[posNo][2])
+    phlc.take_off(takeoff_height, 2.0)
+    time.sleep(4)
 
-        # 리더 드론을 정의된 대로 앞으로 1미터 이동
+    if scf.cf.link_uri == leader_drone and code == 2:
+        # 리더 드론 이동
         phlc.move_distance(moveDelta[posNo][0], 
                            moveDelta[posNo][1], 
                            moveDelta[posNo][2])
-        time.sleep(4)
+        # 이동 후 위치 데이터 업데이트
+        update_leader_position(phlc)
 
-        # 리더 드론 이동 후 팔로워 드론 이륙 및 동기화
+        # 리더 드론 이동 후 팔로워 드론 동기화된 이동
+        delta_x, delta_y, delta_z = moveDelta[posNo]
         for follower_uri in follower_drones:
-            move_follower_drone(follower_uri, takeoff_height)
-            time.sleep(1)  # 팔로워 드론 간 이륙 간격
+            move_follower_drone(follower_uri, delta_x, delta_y, delta_z)
 
-        phlc.land()
-    else:
-        # 팔로워 드론은 리더 드론의 이륙을 기다린 후 동기화된 움직임을 수행
-        follower_sync_movement(scf, posNo)
+    phlc.land()
+    
+def update_leader_position(phlc):
+    global leader_x, leader_y, leader_z
+    # 여기에 리더 드론의 현재 위치 업데이트 로직 작성
+    leader_x, leader_y, leader_z = phlc.position()
 
 def main():
     global leader_drone, follower_drones
@@ -132,14 +135,15 @@ def main():
 
     # 리더 및 팔로워 드론 리스트 초기화
     leader_drone = 'radio://0/80/2M/E7E7E7E704'
-    follower_drones = []
-
-    # 각 드론을 리더 또는 팔로워로 분류
-    for drone_uri, pos in drone_positions.items():
-        if pos == [0.0, 0.0, 0.0]:
-            leader_drone = drone_uri
-        else:
-            follower_drones.append(drone_uri)
+    follower_drones = [
+        'radio://0/80/2M/E7E7E7E701',
+        'radio://0/80/2M/E7E7E7E702',
+        'radio://0/80/2M/E7E7E7E703',
+        'radio://0/80/2M/E7E7E7E704',
+        'radio://0/80/2M/E7E7E7E70A',
+        'radio://0/80/2M/E7E7E7E70B',
+        'radio://0/80/2M/E7E7E7E70C',
+    ]
 
     factory = CachedCfFactory(rw_cache='./cache')
 
