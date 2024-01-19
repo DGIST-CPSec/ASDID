@@ -12,14 +12,13 @@ from cflib.positioning.position_hl_commander import PositionHlCommander
 from cflib.crazyflie.swarm import Swarm, CachedCfFactory
 
 drones = [
-    'radio://0/80/2M/E7E7E7E70A',
-    'radio://0/80/2M/E7E7E7E70B',
-    'radio://0/80/2M/E7E7E7E70C',
-    'radio://0/80/2M/E7E7E7E70D',
-    'radio://0/80/2M/E7E7E7E70E',
     'radio://0/80/2M/E7E7E7E701',
     'radio://0/80/2M/E7E7E7E702',
     'radio://0/80/2M/E7E7E7E703',
+    'radio://0/80/2M/E7E7E7E704',
+    'radio://0/80/2M/E7E7E7E70A',
+    'radio://0/80/2M/E7E7E7E70B',
+    'radio://0/80/2M/E7E7E7E70C',
 ]
 
 psws = [PowerSwitch(drone) for drone in drones]
@@ -50,11 +49,10 @@ arguments = {
     drones[4] : [4, missNo],
     drones[5] : [5, missNo],
     drones[6] : [6, missNo],
-    drones[7] : [7, missNo],
 }
 
 miss_type = ['NO', 'TR']
-drone_ID = ['0A', '0B', '0C', '0D', '0E', '0F', '0G', '0H']
+drone_ID = ['0A', '0B', '0C', '0D', '0E', '0F', '0G']
 
 leader_x, leader_y, leader_z = 0.0, 0.0, 0.0
 prev_leader_x, prev_leader_y, prev_leader_z = 0.0, 0.0, 0.0
@@ -94,7 +92,7 @@ def move_follower_drone(uri, delta_x, delta_y, delta_z):
 def mission(scf: SyncCrazyflie, posNo, code):
     takeoff_height = 1.0
 
-    if scf.cf.link_uri == leader_drone:  # 리더 드론일 경우에만 동작
+    if code==2 and scf.cf.link_uri == leader_drone:  # 리더 드론일 경우에만 동작
         phlc = PositionHlCommander(scf, 
                                    x=initialPos[posNo][0], 
                                    y=initialPos[posNo][1], 
@@ -120,7 +118,7 @@ def main():
     drone_positions = dict(zip(drones, initialPos))
 
     # 리더 및 팔로워 드론 리스트 초기화
-    leader_drone = None
+    leader_drone = 'radio://0/80/2M/E7E7E7E704'
     follower_drones = []
 
     # 각 드론을 리더 또는 팔로워로 분류
