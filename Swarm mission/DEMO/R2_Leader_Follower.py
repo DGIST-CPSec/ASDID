@@ -139,7 +139,6 @@ def main():
         'radio://0/80/2M/E7E7E7E701',
         'radio://0/80/2M/E7E7E7E702',
         'radio://0/80/2M/E7E7E7E703',
-        'radio://0/80/2M/E7E7E7E704',
         'radio://0/80/2M/E7E7E7E70A',
         'radio://0/80/2M/E7E7E7E70B',
         'radio://0/80/2M/E7E7E7E70C',
