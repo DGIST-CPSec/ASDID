@@ -109,18 +109,19 @@ def sync_follower_movement(follower_uri, delta_x, delta_y, delta_z):
 def mission(scf: SyncCrazyflie, posNo, code):
     takeoff_height = 1.0
 
-    phlc = PositionHlCommander(scf, 
+
+    if code == 2:
+        phlc = PositionHlCommander(scf, 
                                x=initialPos[posNo][0], 
                                y=initialPos[posNo][1], 
                                z=initialPos[posNo][2])
-    phlc.take_off(takeoff_height, 2.0)
-    time.sleep(4)
-
-    if scf.cf.link_uri == leader_drone and code == 2:
-        phlc.move_distance(moveDelta[posNo][0], 
-                           moveDelta[posNo][1], 
-                           moveDelta[posNo][2])
-        update_leader_position(phlc)
+        phlc.take_off(takeoff_height, 2.0)
+        time.sleep(4)
+        if scf.cf.link_uri == leader_drone:
+            phlc.move_distance(moveDelta[posNo][0], 
+                            moveDelta[posNo][1], 
+                            moveDelta[posNo][2])
+            update_leader_position(phlc)
 
         delta_x, delta_y, delta_z = moveDelta[posNo]
         for follower_uri in follower_drones:
