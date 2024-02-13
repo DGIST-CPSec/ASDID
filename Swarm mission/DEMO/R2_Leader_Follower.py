@@ -1,191 +1,132 @@
 import time
-import datetime
-import os
+import math
 import cflib.crtp
 from cflib.crazyflie import Crazyflie
-from cflib.crazyflie.log import LogConfig
 from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
-from cflib.positioning.motion_commander import MotionCommander
-from cflib.utils import uri_helper
-from cflib.utils.power_switch import PowerSwitch
 from cflib.positioning.position_hl_commander import PositionHlCommander
-from cflib.crazyflie.swarm import Swarm, CachedCfFactory
+from cflib.crazyflie.log import LogConfig
 
-# Define drone URIs and initial positions
-drones = [
-    'radio://0/80/2M/E7E7E7E701',
+# URI to the Crazyflie to connect to
+leader_uri = 'radio://0/80/2M/E7E7E7E701'
+follower_uris = [
     'radio://0/80/2M/E7E7E7E702',
     'radio://0/80/2M/E7E7E7E703',
-    'radio://0/80/2M/E7E7E7E704',
-    'radio://0/80/2M/E7E7E7E70A',
-    'radio://0/80/2M/E7E7E7E70B',
-    'radio://0/80/2M/E7E7E7E70C',
+    'radio://0/80/2M/E7E7E7E704'
 ]
 
-psws = [PowerSwitch(drone) for drone in drones]
+# Initialize follower drone's positions
+follower_positions = [{'x': 0, 'y': 0, 'z': 0} for _ in range(len(follower_uris))]
+follower_phlcs = []  # List to store PositionHlCommander objects for followers
 
-initialPos = [
-    [-0.7, 0.7, 0], [0.7, 0.7, 0],
-    [-1.0, 0, 0], [0, 0, 0], [1.0, 0, 0],
-    [-0.7, -0.7, 0], [0.7, -0.7, 0],
-]
+def initialize(scf):
+    scf.cf.param.request_update_of_all_params()
+    scf.cf.param.set_value('kalman.resetEstimation', '1')
+    time.sleep(0.1)
+    scf.cf.param.set_value('kalman.resetEstimation', '0')
+    print('[INIT]: kalman prediction reset')
+    scf.cf.param.set_value('health.startPropTest', '1')  # propeller test before flight
+    time.sleep(5)
+    print('[INIT]: initialization complete')
 
-moveDelta = [
-    [0.0, 1.0, 0.0], 
-    [0.0, 1.0, 0.0],
-    [0.0, 1.0, 0.0],
-    [0.0, 1.0, 0.0],
-    [0.0, 1.0, 0.0],
-    [0.0, 1.0, 0.0],
-    [0.0, 1.0, 0.0],
-]
+def make_follower_position_callback(index):
+    def follower_position_callback(timestamp, data, logconf):
+        follower_positions[index]['x'] = data['stateEstimate.x']
+        follower_positions[index]['y'] = data['stateEstimate.y']
+        follower_positions[index]['z'] = data['stateEstimate.z']
+    return follower_position_callback
 
-missNo = int(input('Mission type: \n - [0]Blink \n - [1]In-position \n - [2]Line \n - [6]Up-down\n >>'))
+# Create log configurations for followers to track their positions
+follower_logconfs = []
+for i, _ in enumerate(follower_uris):
+    logconf = LogConfig(name=f'Follower Position {i+1}', period_in_ms=100)
+    logconf.add_variable('stateEstimate.x', 'float')
+    logconf.add_variable('stateEstimate.y', 'float')
+    logconf.add_variable('stateEstimate.z', 'float')
+    follower_logconfs.append(logconf)
 
-arguments = {
-    drones[0] : [0, missNo],
-    drones[1] : [1, missNo],
-    drones[2] : [2, missNo],
-    drones[3] : [3, missNo],
-    drones[4] : [4, missNo],
-    drones[5] : [5, missNo],
-    drones[6] : [6, missNo],
-}
+def update_follower_target_positions(leader_x, leader_y, leader_z):
+    """
+    Update follower drones' target positions to maintain a minimum distance from the leader drone.
+    """
+    MIN_DISTANCE = 1.0  # meters
+    for index, phlc in enumerate(follower_phlcs):
+        dx = leader_x - follower_positions[index]['x']
+        dy = leader_y - follower_positions[index]['y']
+        # Calculate distance in XY plane only
+        distance = math.sqrt(dx**2 + dy**2)
+        if distance < MIN_DISTANCE:
+            # Calculate adjustment ratio
+            ratio = MIN_DISTANCE / distance
+            adjust_x = leader_x - dx * ratio
+            adjust_y = leader_y - dy * ratio
+            # Update target position for follower
+            phlc.go_to(adjust_x, adjust_y, leader_z, 0.5)
 
-miss_type = ['NO', 'TR']
-drone_ID = ['0A', '0B', '0C', '0D', '0E', '0F', '0G']
-
-# Variables to hold leader's position
-leader_x, leader_y, leader_z = 0.0, 0.0, 0.0
-prev_leader_x, prev_leader_y, prev_leader_z = 0.0, 0.0, 0.0
-
-follower_logconfs = {}
-follower_positions = {}
-
-def follower_position_callback(timestamp, data, logconf, uri):
-    if uri not in follower_positions:
-        follower_positions[uri] = {'x': [], 'y': [], 'z': []}
-
+def position_callback(timestamp, data, logconf):
+    # Leader drone's position is now being used to update followers' positions
     x = data['stateEstimate.x']
     y = data['stateEstimate.y']
     z = data['stateEstimate.z']
+    print('Leader Position: ({}, {}, {})'.format(x, y, z))
+    update_follower_target_positions(x, y, z)
 
-    follower_positions[uri]['x'].append(x)
-    follower_positions[uri]['y'].append(y)
-    follower_positions[uri]['z'].append(z)
-
-# Log configuration for the leader drone
-leader_logconf = LogConfig(name='Leader Position', period_in_ms=100)
-leader_logconf.add_variable('stateEstimate.x', 'float')
-leader_logconf.add_variable('stateEstimate.y', 'float')
-leader_logconf.add_variable('stateEstimate.z', 'float')
-
-# Callback function for updating leader's position
-def leader_position_callback(timestamp, data, logconf):
-    global leader_x, leader_y, leader_z
-    global prev_leader_x, prev_leader_y, prev_leader_z
-
-    leader_x = data['stateEstimate.x']
-    leader_y = data['stateEstimate.y']
-    leader_z = data['stateEstimate.z']
-
-    delta_x = leader_x - prev_leader_x
-    delta_y = leader_y - prev_leader_y
-    delta_z = leader_z - prev_leader_z
-
-    for follower_uri in follower_drones:
-        sync_follower_movement(follower_uri, delta_x, delta_y, delta_z)
-
-    prev_leader_x, prev_leader_y, prev_leader_z = leader_x, leader_y, leader_z
-
-# Function to synchronize follower drone's movement with the leader
-def sync_follower_movement(follower_uri, delta_x, delta_y, delta_z):
-    with SyncCrazyflie(follower_uri, cf=Crazyflie(rw_cache='./cache')) as scf:
-        phlc = PositionHlCommander(scf)
-        phlc.move_distance(delta_x, delta_y, delta_z)
-
-    
-# Function to execute the mission for each drone
-def mission(scf: SyncCrazyflie, posNo, code):
+def mission_phlc(leader_cf, follower_cfs, leader_init_pos, follower_init_positions):
+    global follower_phlcs
     takeoff_height = 1.0
 
+    # Initialize and take off with the leader drone
+    leader_phlc = PositionHlCommander(leader_cf, x=leader_init_pos[0], y=leader_init_pos[1], z=leader_init_pos[2], default_velocity=0.5)
+    leader_phlc.take_off(takeoff_height, velocity=0.5)
+    time.sleep(2)
 
-    if code == 2:
-        phlc = PositionHlCommander(scf, 
-                               x=initialPos[posNo][0], 
-                               y=initialPos[posNo][1], 
-                               z=initialPos[posNo][2])
-        phlc.take_off(takeoff_height, 2.0)
-        time.sleep(4)
-        if scf.cf.link_uri == leader_drone:
-            phlc.move_distance(moveDelta[posNo][0], 
-                            moveDelta[posNo][1], 
-                            moveDelta[posNo][2])
-            update_leader_position(phlc)
+    # Initialize and take off with each follower drone
+    follower_phlcs = [PositionHlCommander(follower_cf.cf, x=pos[0], y=pos[1], z=pos[2], default_velocity=0.5) for follower_cf, pos in zip(follower_cfs, follower_init_positions)]
+    for phlc in follower_phlcs:
+        phlc.take_off(takeoff_height, velocity=0.5)
+    time.sleep(2)
 
-        delta_x, delta_y, delta_z = moveDelta[posNo]
-        for follower_uri in follower_drones:
-            sync_follower_movement(follower_uri, delta_x, delta_y, delta_z)
+    # Perform mission (e.g., leader moves forward)
+    leader_phlc.forward(2)
+    time.sleep(2)
 
-    phlc.land()
-    
-# Function to update leader drone's position
-def update_leader_position(phlc):
-    global leader_x, leader_y, leader_z
-    leader_x, leader_y, leader_z = phlc.position()
+    # Land all drones
+    leader_phlc.land()
+    for phlc in follower_phlcs:
+        phlc.land()
 
-# Main function
-# Main function with follower drone log tracking
 def main():
-    global leader_drone, follower_drones
     cflib.crtp.init_drivers()
 
-    # Define drone positions
-    drone_positions = dict(zip(drones, initialPos))
-
-    # Set leader and follower drones
-    leader_drone = 'radio://0/80/2M/E7E7E7E704'
-    follower_drones = [
-        'radio://0/80/2M/E7E7E7E701',
-        'radio://0/80/2M/E7E7E7E702',
-        'radio://0/80/2M/E7E7E7E703',
-        'radio://0/80/2M/E7E7E7E70A',
-        'radio://0/80/2M/E7E7E7E70B',
-        'radio://0/80/2M/E7E7E7E70C',
-    ]
-
-    # Log configurations for follower drones
-    follower_logconfs = {uri: LogConfig(name=f'Follower Position {uri[-2:]}', period_in_ms=100) for uri in follower_drones}
-    for logconf in follower_logconfs.values():
+    with SyncCrazyflie(leader_uri, cf=Crazyflie(rw_cache='./cache')) as leader_sc:
+        leader_cf = leader_sc.cf
+        # Setup log configuration for tracking leader's position
+        logconf = LogConfig(name='Position', period_in_ms=100)
         logconf.add_variable('stateEstimate.x', 'float')
         logconf.add_variable('stateEstimate.y', 'float')
         logconf.add_variable('stateEstimate.z', 'float')
+        leader_cf.log.add_config(logconf)
+        logconf.data_received_cb.add_callback(position_callback)
+        logconf.start()
 
-    factory = CachedCfFactory(rw_cache='./cache')
+        # Initialize and configure each follower
+        follower_cfs = []
+        for i, uri in enumerate(follower_uris):
+            scf = SyncCrazyflie(uri, cf=Crazyflie(rw_cache='./cache'))
+            scf.open_link()
+            initialize(scf.cf)
+            follower_cfs.append(scf)
+            # Setup log configuration for each follower
+            follower_logconf = follower_logconfs[i]
+            follower_logconf.data_received_cb.add_callback(make_follower_position_callback(i))
+            scf.cf.log.add_config(follower_logconf)
+            follower_logconf.start()
 
-    with SyncCrazyflie(leader_drone, cf=Crazyflie(rw_cache='./cache')) as leader_cf:
-        # Setup leader log configuration and start
-        leader_cf.cf.log.add_config(leader_logconf)
-        leader_logconf.data_received_cb.add_callback(leader_position_callback)
-        leader_logconf.start()
+        # Get initial positions for leader and followers
+        leader_init_pos = [0, 0, 0.5]  # Example initial position
+        follower_init_positions = [[1, 0, 0.5], [1, 1, 0.5], [-1, 0, 0.5]]  # Example initial positions
 
-        # Setup follower log configurations and start
-        for uri in follower_drones:
-            with SyncCrazyflie(uri, cf=Crazyflie(rw_cache='./cache')) as follower_cf:
-                follower_logconf = follower_logconfs[uri]
-                follower_cf.cf.log.add_config(follower_logconf)
-                follower_logconf.data_received_cb.add_callback(
-                    lambda ts, data, logconf, uri=uri: follower_position_callback(ts, data, logconf, uri))
-                follower_logconf.start()
-
-        with Swarm(drones, factory=factory) as swarm:
-            try:
-                swarm.parallel_safe(mission, args_dict=arguments)
-            except KeyboardInterrupt:
-                print('EMERGENCY STOP TRIGGERED')
-                for i in psws:
-                    i.platform_power_down()
-                    print('['+str(hex(i.address[4]))+']: SHUTDOWN')
+        # Start the mission
+        mission_phlc(leader_cf, follower_cfs, leader_init_pos, follower_init_positions)
 
 if __name__ == '__main__':
     main()
