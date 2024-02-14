@@ -33,7 +33,17 @@ psws = [PowerSwitch(drone) for drone in drones]
 
 initial_pos = [0, 0, 0] #수정 필요
 
-distance = [] # 수정필요
+# distance = [] # 수정필요
+
+leader = [0.0, 0.0, 0.0]
+
+distance = [
+                         [0, 2.0, 0],
+            [-1.4, 1.4, 0],        [1.4, 1.4, 0], 
+    [-2.0, 0, 0],        [0, 0, 0],      [2.0, 0, 0],
+            [-1.4, -1.4, 0],       [1.4, -1.4, 0],
+                         [0, -2.0, 0],
+]
 
 def order_follow(timestamp, data, logconf):
     print(timestamp,":", data)
@@ -46,7 +56,7 @@ def order_follow(timestamp, data, logconf):
     time.sleep(0.5)
 
 def leader_mission(scf, code, pos):
-    uri = uri_helper.uri_from_env(default='radio://0/80/2M/E7E7E7E701')
+    uri = uri_helper.uri_from_env(default=leader)
     takeoff_height = 1.0
     phlc = PositionHlCommander(scf, x = pos[0], y= pos[1], z = pos[2])
     phlc.take_off(takeoff_height, 1.0)
@@ -56,6 +66,7 @@ def leader_mission(scf, code, pos):
     phlc.set_default_height(1.0)
     phlc.set_default_velocity(0.5)
     phlc.set_landing_height(0.0)
+    
     if code == 1:
         phlc.up(0.5)
         time.sleep(4)
